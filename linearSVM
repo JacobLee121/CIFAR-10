@@ -1,0 +1,119 @@
+#!/usr/bin/env python
+#encoding:utf-8
+"""
+@author:
+@time:2017/3/18 14:33
+"""
+# Import the functions to calculate feature descriptions
+from skimage.feature import hog
+import numpy as np
+from sklearn.externals import joblib
+from sklearn.svm import LinearSVC
+# To read image file and save image feature descriptions
+import os
+import time
+import glob
+import pickle
+import matplotlib.pyplot as plt
+import operator
+from sklearn.svm import SVC
+
+def unpickle(file):
+    import pickle
+    with open(file, 'rb') as fo:
+        DataDict = pickle.load(fo, encoding='bytes')
+    return DataDict
+
+
+def load_CIFAR_batch(filename):
+    """load single batch of cifar"""
+    with open(filename,"rb") as f:
+        datadict = pickle.load(f,encoding='latin1')
+        X = datadict['data']
+        Y = datadict['labels']
+        Y = np.array(Y)#字典载入的Y是list类型，把它转变成array类型
+        return X, Y
+def load_CIFAR_Labels(filename):
+    with open(filename,'rb') as f:
+        label_names = pickle.load(f,encoding='latin1')
+        names = label_names['label_names']
+        return names
+
+
+def getFeat(TrainDataX, TestDataX):
+    TempTestDataX = TestDataX[1,:]
+    TempTestDataX = np.reshape(TempTestDataX,(32,32,3),order = 'F')
+    grayTempTest = rgb2gray(TempTestDataX)
+    TestFeature = hog(grayTempTest, orientations=9, pixels_per_cell=(8,8), cells_per_block=(3, 3), visualise=False, normalise=None)
+    print("TestFeature", TestFeature)
+
+    grayTempTrainGray = rgb2gray(np.reshape(TrainDataX[1,:],(32,32,3),order = 'F'))
+    TrainFeature= hog(grayTempTrainGray, orientations=9, pixels_per_cell=(8, 8), cells_per_block=(3, 3), visualise=False, normalise=None)
+    print("TrainFeature",TrainFeature)
+    for data in TestDataX[1:,:]:
+        image = np.reshape(data, (32, 32, 3),order = "F")
+        gray = rgb2gray(image)
+
+        fd = hog(gray, orientations=9, pixels_per_cell=(8,8), cells_per_block=(3, 3), visualise=False, normalise=None)
+
+        TestFeature = np.vstack((TestFeature,fd))
+
+    path = os.getcwd()
+    fd_path = os.path.join(path,'data','features','test', 'TestFeature.feat')
+    joblib.dump(TestFeature, fd_path)
+    print ("Test features are extracted and saved.")
+
+    for data in TrainDataX[1:,:]:
+        image = np.reshape(data, (32, 32, 3),order = "F")
+        gray = rgb2gray(image)
+
+        fd = hog(gray, orientations=9, pixels_per_cell=(8,8), cells_per_block=(3, 3), visualise=False, normalise=None)
+
+        TrainFeature = np.vstack((TrainFeature,fd))
+
+    fd_path = os.path.join(path,'data','features','train', 'TrainFeature.feat')
+    joblib.dump(TrainFeature, fd_path)
+    print ("Train features are extracted and saved.")
+    return TrainFeature,TestFeature
+def rgb2gray(im):
+    gray = np.dot(im[...,:3], [0.299, 0.587, 0.114])
+    return gray
+if __name__ == '__main__':
+    t0 = time.time()
+    filePath = r'E:\8MachineLearningProject\HOG-SVM-classifer-master Face\cifar-10-python\cifar-10-batches-py'
+    # TrainData, TestData = getData(filePath)
+    label_names = load_CIFAR_Labels("E:/8MachineLearningProject/HOG-SVM-classifer-master Face/cifar-10-python/cifar-10-batches-py/batches.meta")
+    print(label_names)
+    # MM,nn = load_CIFAR_batch("E:/8MachineLearningProject/HOG-SVM-classifer-master Face/cifar-10-python/cifar-10-batches-py/data_batch_1")
+    # fdTest1 = np.reshape(MM[1,:], (32,32,3),order ="F")#需要按照Fortran形式的风格组合
+
+    imgX1, imgY1 = load_CIFAR_batch("E:/8MachineLearningProject/HOG-SVM-classifer-master Face/cifar-10-python/cifar-10-batches-py/data_batch_1")
+    imgX2, imgY2 = load_CIFAR_batch("E:/8MachineLearningProject/HOG-SVM-classifer-master Face/cifar-10-python/cifar-10-batches-py/data_batch_2")
+    imgX3, imgY3 = load_CIFAR_batch("E:/8MachineLearningProject/HOG-SVM-classifer-master Face/cifar-10-python/cifar-10-batches-py/data_batch_3")
+    imgX4, imgY4 = load_CIFAR_batch("E:/8MachineLearningProject/HOG-SVM-classifer-master Face/cifar-10-python/cifar-10-batches-py/data_batch_4")
+    imgX5, imgY5 = load_CIFAR_batch("E:/8MachineLearningProject/HOG-SVM-classifer-master Face/cifar-10-python/cifar-10-batches-py/data_batch_5")
+    Xte_rows, Yte = load_CIFAR_batch("E:/8MachineLearningProject/HOG-SVM-classifer-master Face/cifar-10-python/cifar-10-batches-py/test_batch")
+    Xtr_rows = np.concatenate((imgX1, imgX2, imgX3, imgX4, imgX5))  # 每个图片占一列
+    Ytr_rows = np.concatenate((imgY1, imgY2, imgY3, imgY4, imgY5))  # 每个图片的label  （0-9中的一个）占一列
+    fdTrain, fdTest = getFeat(Xtr_rows[:200,:], Xte_rows[:10,:])
+    print('fdTest[:10]',fdTest[:10],np.shape(fdTest),len(fdTest))
+    print('fdTrain[:10]',fdTrain[:10],np.shape(fdTrain))
+    # print ("Features are extracted and saved.")
+    print("Features are extracted.")
+    clf = LinearSVC()
+    clf.fit(fdTrain,Ytr_rows[:200])
+    #print(clf.fit(fdTrain,Ytr_rows[:200]))
+    print("Modle is trained.")
+    total = 0
+    result = []
+    result = clf.predict(fdTest)
+    t1 = time.time()
+    print('The cast of time is:%f' % (t1 - t0))
+    print('result',result,type(result),len(result))
+    print('Yte',Yte,type(Yte),len(Yte[:10]))
+    acc = np.mean(result == Yte[:10])
+    print('acc=',acc)
+
+
+
+
